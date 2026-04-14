@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>睡眠监测</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; overflow-x: hidden; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+      background: #04070b;
+      color: #b9ffd8;
+      padding: 14px;
+    }
+    .card {
+      width: 100%;
+      max-width: 820px;
+      min-width: 0;
+      border: 1px solid #1f5f43;
+      border-radius: 10px;
+      background: #06110c;
+      box-shadow: 0 0 30px rgba(20, 255, 140, 0.08);
+      padding: 14px;
+    }
+    .top {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 12px;
+      opacity: 0.9;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .title { font-weight: 700; }
+    .q {
+      font-size: 24px;
+      margin: 8px 0 12px;
+      letter-spacing: 1px;
+      color: #eafff5;
+    }
+    .options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    button {
+      border: 1px solid #1f5f43;
+      background: #0a1b13;
+      color: #b7ffd8;
+      padding: 11px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    button:hover { background: #11271d; }
+    button:active { transform: scale(0.99); }
+    .hide { display: none; }
+
+    .terminal {
+      border: 1px solid #1f5f43;
+      border-radius: 8px;
+      padding: 10px;
+      background: #020805;
+    }
+    .headline {
+      color: #d8ffe9;
+      font-size: 13px;
+      margin-bottom: 6px;
+      animation: blink 0.95s infinite;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .line {
+      font-size: 12px;
+      line-height: 1.45;
+      color: #9ef5c6;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .modules {
+      margin-top: 8px;
+      border: 1px solid #1d4f38;
+      border-radius: 8px;
+      padding: 8px;
+      background: #02110a;
+      overflow-x: auto;
+    }
+    .modules .line { color: #b5ffd9; }
+    .log {
+      margin-top: 8px;
+      height: 220px;
+      overflow: hidden;
+      border-top: 1px dashed #1f5f43;
+      padding-top: 8px;
+    }
+    .result {
+      text-align: center;
+      padding: 20px 8px 8px;
+    }
+    .result h2 {
+      margin: 0 0 8px;
+      font-size: 44px;
+      color: #ff4f7b;
+      text-shadow: 0 0 12px rgba(255, 79, 123, 0.6);
+      animation: blink 0.55s infinite;
+    }
+    .result p { margin: 0 0 12px; color: #ffe7ef; }
+    .retry { width: 100%; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.38} }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="top">
+      <div class="title">SLEEP_MONITOR_v10.0</div>
+      <div id="phase">IDLE</div>
+    </div>
+
+    <section id="quiz">
+      <div class="q" id="question"></div>
+      <div class="options">
+        <button data-v="1">睡了</button>
+        <button data-v="0">没睡</button>
+      </div>
+    </section>
+
+    <section id="loading" class="terminal hide">
+      <div class="headline" id="headline">[BOOT] compiling monorepo...</div>
+      <div class="line" id="globalBar">GLOBAL  [----------------------------------------]   0.00%</div>
+      <div class="line" id="stat1">phase=init workers=0 cache=warmup loss=0.0000 lr=0.000000</div>
+      <div class="line" id="stat2">tokens/s=0 gpu=0% vram=0.0/24.0GB eta=00:00 elapsed=00:00</div>
+      <div class="modules" id="modules"></div>
+      <div class="log" id="log"></div>
+    </section>
+
+    <section id="result" class="result hide">
+      <h2 id="resultTitle">你没睡</h2>
+      <p id="resultSub">INPUT DETECTED</p>
+      <button id="retry" class="retry">RETRY</button>
+    </section>
+  </main>
+
+  <script>
+    const questions = [
+      '你在睡觉吗？',
+      '你睡了吗？',
+      '现在是在睡觉状态吗？',
+      '你已经入睡了没？',
+      '此刻你睡着了吧？',
+      '你是不是还醒着？',
+      '当前睡眠进程开始了吗？',
+      '你是否进入梦乡了？',
+      '你的眼皮系统已关机吗？',
+      '最终确认：你睡着没有？'
+    ];
+
+    const phase = document.getElementById('phase');
+    const question = document.getElementById('question');
+    const quiz = document.getElementById('quiz');
+
+    const loading = document.getElementById('loading');
+    const headline = document.getElementById('headline');
+    const globalBar = document.getElementById('globalBar');
+    const stat1 = document.getElementById('stat1');
+    const stat2 = document.getElementById('stat2');
+    const modulesWrap = document.getElementById('modules');
+    const log = document.getElementById('log');
+
+    const result = document.getElementById('result');
+    const resultTitle = document.getElementById('resultTitle');
+    const resultSub = document.getElementById('resultSub');
+    const retry = document.getElementById('retry');
+
+    let flipTimer = null;
+
+    const modules = [
+      { name: 'bootstrap/core', speed: 1.15, weight: 0.09, p: 0 },
+      { name: 'compiler/lexer', speed: 1.08, weight: 0.1, p: 0 },
+      { name: 'compiler/parser', speed: 1.02, weight: 0.1, p: 0 },
+      { name: 'runtime/scheduler', speed: 0.97, weight: 0.12, p: 0 },
+      { name: 'model/tokenizer', speed: 1.2, weight: 0.08, p: 0 },
+      { name: 'model/attention', speed: 0.92, weight: 0.16, p: 0 },
+      { name: 'model/moe-router', speed: 0.88, weight: 0.11, p: 0 },
+      { name: 'train/optimizer', speed: 0.95, weight: 0.11, p: 0 },
+      { name: 'infer/serving', speed: 1.06, weight: 0.08, p: 0 },
+      { name: 'verify/e2e', speed: 0.82, weight: 0.05, p: 0 }
+    ];
+
+    const phaseText = [
+      'scan source tree',
+      'compile toolchain',
+      'build runtime',
+      'materialize checkpoints',
+      'train foundation blocks',
+      'fuse adapters',
+      'run full validation',
+      'assemble final artifact'
+    ];
+
+    const logTemplates = [
+      'fetch shard', 'merge graph', 'emit kernel', 'jit trace', 'cache hit', 'cache miss',
+      'sync gradient', 'reduce all', 'checkpoint write', 'optimizer step', 'verify symbol',
+      'resolve dependency', 'warmup pipeline', 'decode blob', 'quant pass', 'reroute expert'
+    ];
+
+    let i = 0;
+
+    function fmt(seconds) {
+      const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+      const s = String(Math.floor(seconds % 60)).padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    function asciiBar(pct, width = 32) {
+      const c = Math.max(0, Math.min(100, pct));
+      const done = Math.round((c / 100) * width);
+      return `[${'='.repeat(done)}${'-'.repeat(width - done)}]`;
+    }
+
+    function renderQuestion() {
+      phase.textContent = 'QUIZ';
+      question.textContent = questions[i];
+    }
+
+    function renderModules() {
+      modulesWrap.innerHTML = '';
+      modules.forEach((m) => {
+        const row = document.createElement('div');
+        row.className = 'line';
+        row.id = `mod-${m.name.replace(/[^a-z0-9]/gi, '')}`;
+        row.textContent = `${m.name.padEnd(18, ' ')} ${asciiBar(0, 26)}   0.00%`;
+        modulesWrap.appendChild(row);
+      });
+    }
+
+    function runLoading() {
+      phase.textContent = 'BUILD';
+      quiz.classList.add('hide');
+      loading.classList.remove('hide');
+      result.classList.add('hide');
+      log.innerHTML = '';
+
+      modules.forEach((m) => { m.p = 0; });
+      renderModules();
+
+      const duration = 36000;
+      const tick = 120;
+      const ticks = Math.floor(duration / tick);
+      const startTs = Date.now();
+      let t = 0;
+
+      const timer = setInterval(() => {
+        t += 1;
+        const elapsed = (Date.now() - startTs) / 1000;
+        const stage = Math.min(phaseText.length - 1, Math.floor((t / ticks) * phaseText.length));
+
+        modules.forEach((m, idx) => {
+          const base = (100 / ticks) * m.speed * (0.55 + Math.sin((t + idx * 11) / 21) * 0.12 + 0.45);
+          const lateBoost = t > ticks * 0.72 ? 1.18 : 1;
+          m.p = Math.min(100, m.p + base * lateBoost);
+        });
+
+        const overall = modules.reduce((acc, m) => acc + m.p * m.weight, 0);
+        const doneRatio = Math.min(0.999, overall / 100);
+        const remain = elapsed > 0 ? Math.max(0, elapsed * (1 / Math.max(doneRatio, 0.001) - 1)) : duration / 1000;
+
+        headline.textContent = `[${phaseText[stage]}] eta=${fmt(remain)}`;
+        globalBar.textContent = `GLOBAL  ${asciiBar(overall, 40)} ${overall.toFixed(2).padStart(6, ' ')}%`;
+
+        const loss = (3.2 / (1 + t * 0.028) + Math.random() * 0.02).toFixed(4);
+        const lr = (0.0011 * (1 - Math.min(overall, 99) / 140)).toFixed(6);
+        const workers = Math.min(4096, 256 + t * 14);
+        const tok = Math.round(12000 + overall * 240 + Math.random() * 1300);
+        const gpu = Math.min(99, Math.round(62 + overall * 0.33 + Math.random() * 7));
+        const vram = (15.2 + overall * 0.087).toFixed(1);
+
+        stat1.textContent = `phase=${phaseText[stage].replace(/\s+/g, '_')} workers=${workers} cache=${t % 9 === 0 ? 'rebuild' : 'hot'} loss=${loss} lr=${lr}`;
+        stat2.textContent = `tokens/s=${tok} gpu=${gpu}% vram=${vram}/24.0GB eta=${fmt(remain)} elapsed=${fmt(elapsed)}`;
+
+        modules.forEach((m) => {
+          const id = `mod-${m.name.replace(/[^a-z0-9]/gi, '')}`;
+          const row = document.getElementById(id);
+          if (row) row.textContent = `${m.name.padEnd(18, ' ')} ${asciiBar(m.p, 26)} ${m.p.toFixed(2).padStart(6, ' ')}%`;
+        });
+
+        const tpl = logTemplates[Math.floor(Math.random() * logTemplates.length)];
+        const target = modules[Math.floor(Math.random() * modules.length)].name;
+        const line = document.createElement('div');
+        line.className = 'line';
+        line.textContent = `${tpl.padEnd(18, ' ')} | target=${target} | io=${Math.round(100 + Math.random() * 980)}MB/s | mem=${Math.round(20 + Math.random() * 70)}%`;
+        log.appendChild(line);
+        if (log.children.length > 14) log.removeChild(log.firstChild);
+
+        if (t >= ticks || overall >= 99.95) {
+          clearInterval(timer);
+          modules.forEach((m) => { m.p = 100; });
+          modules.forEach((m) => {
+            const id = `mod-${m.name.replace(/[^a-z0-9]/gi, '')}`;
+            const row = document.getElementById(id);
+            if (row) row.textContent = `${m.name.padEnd(18, ' ')} ${asciiBar(100, 26)} 100.00%`;
+          });
+          globalBar.textContent = `GLOBAL  ${asciiBar(100, 40)} 100.00%`;
+          headline.textContent = '[link] final artifact built';
+          stat1.textContent = 'phase=finalize workers=4096 cache=stable loss=0.0001 lr=0.000000';
+          stat2.textContent = `tokens/s=0 gpu=4% vram=2.1/24.0GB eta=00:00 elapsed=${fmt((Date.now() - startTs) / 1000)}`;
+
+          setTimeout(() => {
+            phase.textContent = 'DONE';
+            loading.classList.add('hide');
+            result.classList.remove('hide');
+            resultTitle.textContent = '你没睡';
+            resultSub.textContent = 'INPUT DETECTED';
+            if (flipTimer) clearTimeout(flipTimer);
+            flipTimer = setTimeout(() => {
+              resultTitle.textContent = '你睡着了';
+              resultSub.textContent = 'STATE UPDATED';
+            }, 10000);
+          }, 450);
+        }
+      }, tick);
+    }
+
+    document.querySelectorAll('[data-v]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (i < questions.length - 1) {
+          i += 1;
+          renderQuestion();
+        } else {
+          runLoading();
+        }
+      });
+    });
+
+    retry.addEventListener('click', () => {
+      i = 0;
+      if (flipTimer) {
+        clearTimeout(flipTimer);
+        flipTimer = null;
+      }
+      resultTitle.textContent = '你没睡';
+      resultSub.textContent = 'INPUT DETECTED';
+      loading.classList.add('hide');
+      result.classList.add('hide');
+      quiz.classList.remove('hide');
+      renderQuestion();
+    });
+
+    renderQuestion();
+  </script>
+</body>
+</html>
