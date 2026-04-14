@@ -64,15 +64,17 @@
       border-radius: 8px;
       padding: 10px;
       background: #020805;
+      animation: terminalShake 0.08s steps(2, end) infinite;
     }
     .headline {
       color: #d8ffe9;
       font-size: 13px;
       margin-bottom: 6px;
-      animation: blink 0.95s infinite;
+      animation: blink 0.22s steps(2, end) infinite;
       white-space: normal;
       overflow-wrap: anywhere;
       word-break: break-word;
+      text-shadow: 0 0 8px rgba(120, 255, 200, 0.5);
     }
     .line {
       font-size: 12px;
@@ -81,6 +83,7 @@
       white-space: normal;
       overflow-wrap: anywhere;
       word-break: break-word;
+      animation: blink 0.34s steps(2, end) infinite;
     }
     .modules {
       margin-top: 8px;
@@ -111,7 +114,14 @@
     }
     .result p { margin: 0 0 12px; color: #ffe7ef; }
     .retry { width: 100%; }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.38} }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.28} }
+    @keyframes terminalShake {
+      0% { transform: translate(0, 0); }
+      25% { transform: translate(0.4px, -0.2px); }
+      50% { transform: translate(-0.4px, 0.3px); }
+      75% { transform: translate(0.2px, 0.4px); }
+      100% { transform: translate(0, 0); }
+    }
   </style>
 </head>
 <body>
@@ -177,6 +187,8 @@
     const retry = document.getElementById('retry');
 
     let flipTimer = null;
+    let etaSkipSeconds = 0;
+    let isLoadingActive = false;
 
     const modules = [
       { name: 'bootstrap/core', speed: 1.15, weight: 0.09, p: 0 },
@@ -244,6 +256,8 @@
       loading.classList.remove('hide');
       result.classList.add('hide');
       log.innerHTML = '';
+      etaSkipSeconds = 0;
+      isLoadingActive = true;
 
       modules.forEach((m) => { m.p = 0; });
       renderModules();
@@ -267,7 +281,8 @@
 
         const overall = modules.reduce((acc, m) => acc + m.p * m.weight, 0);
         const doneRatio = Math.min(0.999, overall / 100);
-        const remain = elapsed > 0 ? Math.max(0, elapsed * (1 / Math.max(doneRatio, 0.001) - 1)) : duration / 1000;
+        const baseRemain = elapsed > 0 ? Math.max(0, elapsed * (1 / Math.max(doneRatio, 0.001) - 1)) : duration / 1000;
+        const remain = Math.max(0, baseRemain - etaSkipSeconds);
 
         headline.textContent = `[${phaseText[stage]}] eta=${fmt(remain)}`;
         globalBar.textContent = `GLOBAL  ${asciiBar(overall, 40)} ${overall.toFixed(2).padStart(6, ' ')}%`;
@@ -298,6 +313,7 @@
 
         if (t >= ticks || overall >= 99.95) {
           clearInterval(timer);
+          isLoadingActive = false;
           modules.forEach((m) => { m.p = 100; });
           modules.forEach((m) => {
             const id = `mod-${m.name.replace(/[^a-z0-9]/gi, '')}`;
@@ -325,6 +341,12 @@
       }, tick);
     }
 
+    document.addEventListener('click', () => {
+      if (isLoadingActive) {
+        etaSkipSeconds += 1;
+      }
+    });
+
     document.querySelectorAll('[data-v]').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (i < questions.length - 1) {
@@ -338,6 +360,8 @@
 
     retry.addEventListener('click', () => {
       i = 0;
+      isLoadingActive = false;
+      etaSkipSeconds = 0;
       if (flipTimer) {
         clearTimeout(flipTimer);
         flipTimer = null;
