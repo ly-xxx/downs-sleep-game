@@ -64,13 +64,11 @@
       border-radius: 8px;
       padding: 10px;
       background: #020805;
-      animation: terminalShake 0.08s steps(2, end) infinite;
     }
     .headline {
       color: #d8ffe9;
       font-size: 13px;
       margin-bottom: 6px;
-      animation: blink 0.22s steps(2, end) infinite;
       white-space: normal;
       overflow-wrap: anywhere;
       word-break: break-word;
@@ -83,7 +81,6 @@
       white-space: normal;
       overflow-wrap: anywhere;
       word-break: break-word;
-      animation: blink 0.34s steps(2, end) infinite;
     }
     .modules {
       margin-top: 8px;
@@ -115,13 +112,6 @@
     .result p { margin: 0 0 12px; color: #ffe7ef; }
     .retry { width: 100%; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.28} }
-    @keyframes terminalShake {
-      0% { transform: translate(0, 0); }
-      25% { transform: translate(0.4px, -0.2px); }
-      50% { transform: translate(-0.4px, 0.3px); }
-      75% { transform: translate(0.2px, 0.4px); }
-      100% { transform: translate(0, 0); }
-    }
   </style>
 </head>
 <body>
@@ -263,7 +253,7 @@
       renderModules();
 
       const duration = 36000;
-      const tick = 120;
+      const tick = 85;
       const ticks = Math.floor(duration / tick);
       const startTs = Date.now();
       let t = 0;
@@ -283,6 +273,7 @@
         const doneRatio = Math.min(0.999, overall / 100);
         const baseRemain = elapsed > 0 ? Math.max(0, elapsed * (1 / Math.max(doneRatio, 0.001) - 1)) : duration / 1000;
         const remain = Math.max(0, baseRemain - etaSkipSeconds);
+        const shouldFinishNow = remain <= 0;
 
         headline.textContent = `[${phaseText[stage]}] eta=${fmt(remain)}`;
         globalBar.textContent = `GLOBAL  ${asciiBar(overall, 40)} ${overall.toFixed(2).padStart(6, ' ')}%`;
@@ -311,7 +302,7 @@
         log.appendChild(line);
         if (log.children.length > 14) log.removeChild(log.firstChild);
 
-        if (t >= ticks || overall >= 99.95) {
+        if (t >= ticks || overall >= 99.95 || shouldFinishNow) {
           clearInterval(timer);
           isLoadingActive = false;
           modules.forEach((m) => { m.p = 100; });
